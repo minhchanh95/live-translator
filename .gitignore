@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 .next/
 node_modules/
 .env
 .env.local
 .DS_Store
-=======
-node_modules
->>>>>>> 9d6f41c (test)
