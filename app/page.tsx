@@ -8,6 +8,16 @@ const sourceLanguages = [
   { code: "ko-KR", translateCode: "ko", label: "Korean" },
   { code: "zh-CN", translateCode: "zh-CN", label: "Chinese" },
   { code: "vi-VN", translateCode: "vi", label: "Vietnamese" },
+  { code: "ru-RU", translateCode: "ru", label: "Russian" },
+];
+
+const targetLanguages = [
+  { code: "vi", label: "Vietnamese" },
+  { code: "en", label: "English" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "zh-CN", label: "Chinese" },
+  { code: "ru", label: "Russian" },
 ];
 
 export default function Home() {
@@ -22,12 +32,14 @@ export default function Home() {
   const [subtitleMode, setSubtitleMode] = useState(false);
 
   const [sourceLang, setSourceLang] = useState("ja-JP");
+  const [targetLang, setTargetLang] = useState("vi");
+  const targetLangRef = useRef("vi");
 
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
 
-  const [vietnameseText, setVietnameseText] = useState("");
-  const [interimVietnameseText, setInterimVietnameseText] = useState("");
+  const [translatedText, setTranslatedText] = useState("");
+  const [interimTranslatedText, setInterimTranslatedText] = useState("");
   const [latestTranslation, setLatestTranslation] = useState("");
 
   const [status, setStatus] = useState("Waiting...");
@@ -37,6 +49,13 @@ export default function Home() {
     return (
       sourceLanguages.find((lang) => lang.code === sourceLang)?.translateCode ||
       "auto"
+    );
+  };
+
+  const getTargetLabel = () => {
+    return (
+      targetLanguages.find((lang) => lang.code === targetLang)?.label ||
+      "Translation"
     );
   };
 
@@ -55,7 +74,11 @@ export default function Home() {
 
   useEffect(() => {
     scrollToBottom(translationBoxRef);
-  }, [vietnameseText, interimVietnameseText]);
+  }, [translatedText, interimTranslatedText]);
+
+  useEffect(() => {
+    targetLangRef.current = targetLang;
+  }, [targetLang]);
 
   const safeStartRecognition = () => {
     const recognition = recognitionRef.current;
@@ -92,7 +115,7 @@ export default function Home() {
         "https://translate.googleapis.com/translate_a/single" +
         `?client=gtx` +
         `&sl=${encodeURIComponent(sl)}` +
-        `&tl=vi` +
+        `&tl=${encodeURIComponent(targetLangRef.current)}` +
         `&dt=t` +
         `&q=${encodeURIComponent(text)}`;
 
@@ -108,21 +131,30 @@ export default function Home() {
       const translated = data[0].map((item: any) => item[0]).join("");
 
       if (interim) {
-        setInterimVietnameseText(translated);
+        setInterimTranslatedText(translated);
         setLatestTranslation(translated);
       } else {
-        setVietnameseText((prev) => prev + translated + " ");
+        setTranslatedText((prev) => prev + translated + " ");
         setLatestTranslation(translated);
       }
     } catch (error) {
       console.warn("Translate warning:", error);
 
       if (!interim) {
-        setVietnameseText((prev) => prev + "\n[Dịch lỗi]\n");
+        setTranslatedText((prev) => prev + "\n[Dịch lỗi]\n");
       }
     } finally {
       if (!interim) setTranslating(false);
     }
+  };
+
+  const changeTargetLanguage = (newLang: string) => {
+    targetLangRef.current = newLang;
+    setTargetLang(newLang);
+    setTranslatedText("");
+    setInterimTranslatedText("");
+    setLatestTranslation("Switching language...");
+    setStatus(`Switched target language to ${newLang}`);
   };
 
   const startTranslate = () => {
@@ -171,7 +203,7 @@ export default function Home() {
       if (finalText.trim()) {
         setFinalTranscript((prev) => prev + finalText);
         await translateText(finalText, false);
-        setInterimVietnameseText("");
+        setInterimTranslatedText("");
       }
 
       setInterimTranscript(interim);
@@ -197,7 +229,7 @@ export default function Home() {
 
       if (error === "audio-capture") {
         setStatus(
-          "Không capture được microphone. Hãy chọn VB-CABLE / BlackHole / Voicemeeter Out B1."
+          "Không capture được microphone. Hãy chọn VB-CABLE / BlackHole / Voicemeeter Out B1.",
         );
         scheduleRestart(1500);
         return;
@@ -263,8 +295,8 @@ export default function Home() {
   const clearText = () => {
     setFinalTranscript("");
     setInterimTranscript("");
-    setVietnameseText("");
-    setInterimVietnameseText("");
+    setTranslatedText("");
+    setInterimTranslatedText("");
     setLatestTranslation("");
   };
 
@@ -313,22 +345,48 @@ export default function Home() {
             Headphone supported via BlackHole / VB-CABLE / Voicemeeter.
           </p>
 
-          <div style={{ marginBottom: 24 }}>
-            <label>Input Language:</label>
-            <br />
+          <div
+            style={{
+              display: "flex",
+              gap: 24,
+              flexWrap: "wrap",
+              marginBottom: 24,
+            }}
+          >
+            <div>
+              <label>Input Language:</label>
+              <br />
 
-            <select
-              value={sourceLang}
-              disabled={listening}
-              onChange={(e) => setSourceLang(e.target.value)}
-              style={selectStyle}
-            >
-              {sourceLanguages.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
+              <select
+                value={sourceLang}
+                disabled={listening}
+                onChange={(e) => setSourceLang(e.target.value)}
+                style={selectStyle}
+              >
+                {sourceLanguages.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>Target Language:</label>
+              <br />
+
+              <select
+                value={targetLang}
+                onChange={(e) => changeTargetLanguage(e.target.value)}
+                style={selectStyle}
+              >
+                {targetLanguages.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
@@ -369,7 +427,9 @@ export default function Home() {
             <ol>
               <li>Mac: Chrome microphone = BlackHole 2ch</li>
               <li>Windows: Chrome microphone = Voicemeeter Out B1</li>
-              <li>Zoom/Teams microphone = real microphone, not virtual audio</li>
+              <li>
+                Zoom/Teams microphone = real microphone, not virtual audio
+              </li>
               <li>Use Chrome browser</li>
             </ol>
           </div>
@@ -421,20 +481,20 @@ export default function Home() {
 
             <div>
               <h2 style={{ marginBottom: 12 }}>
-                Vietnamese Translation {translating ? "..." : ""}
+                {getTargetLabel()} Translation {translating ? "..." : ""}
               </h2>
 
               <div
                 ref={translationBoxRef}
                 style={boxStyle("#052e16", "#bbf7d0")}
               >
-                <span>{vietnameseText}</span>
+                <span>{translatedText}</span>
                 <span style={{ color: "#7ddfa8" }}>
-                  {interimVietnameseText}
+                  {interimTranslatedText}
                 </span>
 
-                {!vietnameseText && !interimVietnameseText
-                  ? "Vietnamese translation will appear here..."
+                {!translatedText && !interimTranslatedText
+                  ? `${getTargetLabel()} translation will appear here...`
                   : ""}
               </div>
             </div>
@@ -444,7 +504,22 @@ export default function Home() {
 
       {subtitleMode && (
         <section style={subtitlePageStyle}>
-          <button onClick={() => setSubtitleMode(false)} style={exitButtonStyle}>
+          <select
+            value={targetLang}
+            onChange={(e) => changeTargetLanguage(e.target.value)}
+            style={subtitleSelectStyle}
+          >
+            {targetLanguages.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.label}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => setSubtitleMode(false)}
+            style={exitButtonStyle}
+          >
             Exit
           </button>
 
@@ -459,17 +534,17 @@ export default function Home() {
 
 function mainStyle(subtitleMode: boolean): React.CSSProperties {
   if (subtitleMode) {
-  return {
-    margin: 0,
-    padding: 0,
-    width: "100vw",
-    height: "100vh",
-    overflow: "hidden",
-    background: "transparent",
-    color: "white",
-    fontFamily: "Arial, sans-serif",
-  };
-}
+    return {
+      margin: 0,
+      padding: 0,
+      width: "100vw",
+      height: "100vh",
+      overflow: "hidden",
+      background: "transparent",
+      color: "white",
+      fontFamily: "Arial, sans-serif",
+    };
+  }
 
   return {
     padding: 32,
@@ -502,6 +577,20 @@ const subtitleBarStyle: React.CSSProperties = {
   fontWeight: 700,
   lineHeight: 1.25,
   textAlign: "center",
+};
+
+const subtitleSelectStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 10,
+  left: 10,
+  zIndex: 100000,
+  padding: "6px 10px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.25)",
+  background: "rgba(0,0,0,0.75)",
+  color: "white",
+  fontWeight: "bold",
+  cursor: "pointer",
 };
 
 const exitButtonStyle: React.CSSProperties = {
