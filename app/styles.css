@@ -39,3 +39,19 @@ h2 { margin: 0 0 16px; }
 .log.error p { color: #fecaca; }
 .muted { color: var(--muted); }
 @media (max-width: 800px) { .hero, .grid { grid-template-columns: 1fr; } }
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #111827;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
