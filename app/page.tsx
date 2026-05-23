@@ -19,6 +19,8 @@ export default function Home() {
   const translationBoxRef = useRef<HTMLDivElement | null>(null);
 
   const [listening, setListening] = useState(false);
+  const [subtitleMode, setSubtitleMode] = useState(false);
+
   const [sourceLang, setSourceLang] = useState("ja-JP");
 
   const [finalTranscript, setFinalTranscript] = useState("");
@@ -26,6 +28,7 @@ export default function Home() {
 
   const [vietnameseText, setVietnameseText] = useState("");
   const [interimVietnameseText, setInterimVietnameseText] = useState("");
+  const [latestTranslation, setLatestTranslation] = useState("");
 
   const [status, setStatus] = useState("Waiting...");
   const [translating, setTranslating] = useState(false);
@@ -56,7 +59,6 @@ export default function Home() {
 
   const safeStartRecognition = () => {
     const recognition = recognitionRef.current;
-
     if (!recognition || !shouldKeepListeningRef.current) return;
 
     try {
@@ -103,13 +105,14 @@ export default function Home() {
       }
 
       const data = JSON.parse(rawText);
-
       const translated = data[0].map((item: any) => item[0]).join("");
 
       if (interim) {
         setInterimVietnameseText(translated);
+        setLatestTranslation(translated);
       } else {
         setVietnameseText((prev) => prev + translated + " ");
+        setLatestTranslation(translated);
       }
     } catch (error) {
       console.warn("Translate warning:", error);
@@ -180,7 +183,6 @@ export default function Home() {
 
     recognition.onerror = (event: any) => {
       const error = event.error || "unknown";
-
       console.warn("Speech recognition warning:", error);
 
       if (!shouldKeepListeningRef.current) return;
@@ -195,7 +197,7 @@ export default function Home() {
 
       if (error === "audio-capture") {
         setStatus(
-          "Không capture được microphone. Hãy chọn VB-CABLE / BlackHole / Voicemeeter Out B1.",
+          "Không capture được microphone. Hãy chọn VB-CABLE / BlackHole / Voicemeeter Out B1."
         );
         scheduleRestart(1500);
         return;
@@ -263,19 +265,22 @@ export default function Home() {
     setInterimTranscript("");
     setVietnameseText("");
     setInterimVietnameseText("");
+    setLatestTranslation("");
   };
+
   const downloadOriginalText = () => {
-    const content = finalTranscript + "\n" + interimTranscript;
+    const content = `${finalTranscript}\n${interimTranscript}`.trim();
+
+    if (!content) {
+      alert("Original script chưa có nội dung để download.");
+      return;
+    }
 
     const blob = new Blob([content], {
       type: "text/plain;charset=utf-8",
     });
 
     const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-
     const now = new Date();
 
     const filename =
@@ -285,160 +290,250 @@ export default function Home() {
       `${String(now.getHours()).padStart(2, "0")}-` +
       `${String(now.getMinutes()).padStart(2, "0")}.txt`;
 
+    const a = document.createElement("a");
+    a.href = url;
     a.download = filename;
 
     document.body.appendChild(a);
     a.click();
 
     document.body.removeChild(a);
-
     URL.revokeObjectURL(url);
   };
 
   return (
-    <main
-      style={{
-        padding: 32,
-        fontFamily: "Arial, sans-serif",
-        background: "#0f172a",
-        minHeight: "100vh",
-        color: "white",
-      }}
-    >
-      <h1 style={{ fontSize: 48, fontWeight: "bold", marginBottom: 16 }}>
-        Live Event Translator - Free
-      </h1>
+    <main style={mainStyle(subtitleMode)}>
+      {!subtitleMode && (
+        <>
+          <h1 style={{ fontSize: 48, fontWeight: "bold", marginBottom: 16 }}>
+            Live Event Translator - Free
+          </h1>
 
-      <p style={{ marginBottom: 24, color: "#cbd5e1" }}>
-        Headphone supported via BlackHole / VB-CABLE / Voicemeeter.
-      </p>
+          <p style={{ marginBottom: 24, color: "#cbd5e1" }}>
+            Headphone supported via BlackHole / VB-CABLE / Voicemeeter.
+          </p>
 
-      <div style={{ marginBottom: 24 }}>
-        <label>Input Language:</label>
-        <br />
+          <div style={{ marginBottom: 24 }}>
+            <label>Input Language:</label>
+            <br />
 
-        <select
-          value={sourceLang}
-          disabled={listening}
-          onChange={(e) => setSourceLang(e.target.value)}
-          style={{
-            padding: 10,
-            marginTop: 8,
-            borderRadius: 8,
-            background: "#1e293b",
-            color: "white",
-            border: "1px solid #475569",
-          }}
-        >
-          {sourceLanguages.map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.label}
-            </option>
-          ))}
-        </select>
-      </div>
+            <select
+              value={sourceLang}
+              disabled={listening}
+              onChange={(e) => setSourceLang(e.target.value)}
+              style={selectStyle}
+            >
+              {sourceLanguages.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-        {!listening ? (
-          <button onClick={startTranslate} style={buttonStyle("#16a34a")}>
-            Start Free Translate
-          </button>
-        ) : (
-          <button onClick={stopTranslate} style={buttonStyle("#dc2626")}>
-            Stop
-          </button>
-        )}
+          <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+            {!listening ? (
+              <button onClick={startTranslate} style={buttonStyle("#16a34a")}>
+                Start Free Translate
+              </button>
+            ) : (
+              <button onClick={stopTranslate} style={buttonStyle("#dc2626")}>
+                Stop
+              </button>
+            )}
 
-        <button onClick={clearText} style={buttonStyle("#475569")}>
-          Clear
-        </button>
-      </div>
-
-      <p style={{ marginBottom: 24, color: "#facc15", whiteSpace: "pre-wrap" }}>
-        Status: {status}
-      </p>
-
-      <div
-        style={{
-          background: "#1e293b",
-          padding: 16,
-          borderRadius: 12,
-          marginBottom: 24,
-          color: "#cbd5e1",
-        }}
-      >
-        <b>Recommended setup:</b>
-        <ol>
-          <li>Mac: Chrome microphone = BlackHole 2ch</li>
-          <li>Windows: Chrome microphone = Voicemeeter Out B1</li>
-          <li>Zoom/Teams microphone = real microphone, not virtual audio</li>
-          <li>Use Chrome browser</li>
-        </ol>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 20,
-          alignItems: "start",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 12,
-            }}
-          >
-            <h2>Original</h2>
+            <button onClick={clearText} style={buttonStyle("#475569")}>
+              Clear
+            </button>
 
             <button
-              onClick={downloadOriginalText}
-              style={{
-                padding: "8px 14px",
-                borderRadius: 8,
-                border: "none",
-                background: "#2563eb",
-                color: "white",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
+              onClick={() => setSubtitleMode(true)}
+              style={buttonStyle("#7c3aed")}
             >
-              Download TXT
+              Subtitle Mode
             </button>
           </div>
 
-          <div ref={originalBoxRef} style={boxStyle("#000000", "#ffffff")}>
-            <span>{finalTranscript}</span>
-            <span style={{ color: "#999" }}>{interimTranscript}</span>
+          <p
+            style={{
+              marginBottom: 24,
+              color: "#facc15",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            Status: {status}
+          </p>
 
-            {!finalTranscript && !interimTranscript
-              ? "Original speech will appear here..."
-              : ""}
+          <div style={guideBoxStyle}>
+            <b>Recommended setup:</b>
+            <ol>
+              <li>Mac: Chrome microphone = BlackHole 2ch</li>
+              <li>Windows: Chrome microphone = Voicemeeter Out B1</li>
+              <li>Zoom/Teams microphone = real microphone, not virtual audio</li>
+              <li>Use Chrome browser</li>
+            </ol>
           </div>
-        </div>
 
-        <div>
-          <h2 style={{ marginBottom: 12 }}>
-            Vietnamese Translation {translating ? "..." : ""}
-          </h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 20,
+              alignItems: "start",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <h2>Original</h2>
 
-          <div ref={translationBoxRef} style={boxStyle("#052e16", "#bbf7d0")}>
-            <span>{vietnameseText}</span>
-            <span style={{ color: "#7ddfa8" }}>{interimVietnameseText}</span>
+                <button
+                  onClick={downloadOriginalText}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#2563eb",
+                    color: "white",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Download TXT
+                </button>
+              </div>
 
-            {!vietnameseText && !interimVietnameseText
-              ? "Vietnamese translation will appear here..."
-              : ""}
+              <div ref={originalBoxRef} style={boxStyle("#000000", "#ffffff")}>
+                <span>{finalTranscript}</span>
+                <span style={{ color: "#999" }}>{interimTranscript}</span>
+
+                {!finalTranscript && !interimTranscript
+                  ? "Original speech will appear here..."
+                  : ""}
+              </div>
+            </div>
+
+            <div>
+              <h2 style={{ marginBottom: 12 }}>
+                Vietnamese Translation {translating ? "..." : ""}
+              </h2>
+
+              <div
+                ref={translationBoxRef}
+                style={boxStyle("#052e16", "#bbf7d0")}
+              >
+                <span>{vietnameseText}</span>
+                <span style={{ color: "#7ddfa8" }}>
+                  {interimVietnameseText}
+                </span>
+
+                {!vietnameseText && !interimVietnameseText
+                  ? "Vietnamese translation will appear here..."
+                  : ""}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
+
+      {subtitleMode && (
+        <section style={subtitlePageStyle}>
+          <button onClick={() => setSubtitleMode(false)} style={exitButtonStyle}>
+            Exit
+          </button>
+
+          <div style={subtitleBarStyle}>
+            {latestTranslation || "Waiting for translation..."}
+          </div>
+        </section>
+      )}
     </main>
   );
 }
+
+function mainStyle(subtitleMode: boolean): React.CSSProperties {
+  if (subtitleMode) {
+  return {
+    margin: 0,
+    padding: 0,
+    width: "100vw",
+    height: "100vh",
+    overflow: "hidden",
+    background: "transparent",
+    color: "white",
+    fontFamily: "Arial, sans-serif",
+  };
+}
+
+  return {
+    padding: 32,
+    fontFamily: "Arial, sans-serif",
+    background: "#0f172a",
+    minHeight: "100vh",
+    color: "white",
+  };
+}
+
+const subtitlePageStyle: React.CSSProperties = {
+  width: "100vw",
+  height: "100vh",
+  overflow: "hidden",
+  position: "relative",
+  background: "transparent",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const subtitleBarStyle: React.CSSProperties = {
+  width: "70%",
+  maxWidth: 680,
+  background: "rgba(0, 0, 0, 0.75)",
+  color: "white",
+  padding: "8px 16px",
+  borderRadius: 10,
+  fontSize: 18,
+  fontWeight: 700,
+  lineHeight: 1.25,
+  textAlign: "center",
+};
+
+const exitButtonStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 10,
+  right: 10,
+  zIndex: 100000,
+  padding: "6px 10px",
+  borderRadius: 8,
+  border: "none",
+  background: "rgba(0,0,0,0.75)",
+  color: "white",
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const selectStyle: React.CSSProperties = {
+  padding: 10,
+  marginTop: 8,
+  borderRadius: 8,
+  background: "#1e293b",
+  color: "white",
+  border: "1px solid #475569",
+};
+
+const guideBoxStyle: React.CSSProperties = {
+  background: "#1e293b",
+  padding: 16,
+  borderRadius: 12,
+  marginBottom: 24,
+  color: "#cbd5e1",
+};
 
 function buttonStyle(background: string): React.CSSProperties {
   return {

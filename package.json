@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack & open http://localhost:3000",
+    "dev": "next dev --webpack & open -a 'Google Chrome' --args --app=http://localhost:3000 --window-size=800,220",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
