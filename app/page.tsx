@@ -20,6 +20,12 @@ const targetLanguages = [
   { code: "ru", label: "Russian" },
 ];
 
+type ScriptMessage = {
+  id: number;
+  sender: string;
+  text: string;
+};
+
 export default function Home() {
   const recognitionRef = useRef<any>(null);
   const shouldKeepListeningRef = useRef(false);
@@ -41,6 +47,11 @@ export default function Home() {
   const [translatedText, setTranslatedText] = useState("");
   const [interimTranslatedText, setInterimTranslatedText] = useState("");
   const [latestTranslation, setLatestTranslation] = useState("");
+
+  const [originalMessages, setOriginalMessages] = useState<ScriptMessage[]>([]);
+  const [translatedMessages, setTranslatedMessages] = useState<ScriptMessage[]>(
+    [],
+  );
 
   const [status, setStatus] = useState("Waiting...");
   const [translating, setTranslating] = useState(false);
@@ -70,11 +81,11 @@ export default function Home() {
 
   useEffect(() => {
     scrollToBottom(originalBoxRef);
-  }, [finalTranscript, interimTranscript]);
+  }, [finalTranscript, interimTranscript, originalMessages]);
 
   useEffect(() => {
     scrollToBottom(translationBoxRef);
-  }, [translatedText, interimTranslatedText]);
+  }, [translatedText, interimTranslatedText, translatedMessages]);
 
   useEffect(() => {
     targetLangRef.current = targetLang;
@@ -136,12 +147,30 @@ export default function Home() {
       } else {
         setTranslatedText((prev) => prev + translated + " ");
         setLatestTranslation(translated);
+
+        setTranslatedMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + Math.random(),
+            sender: getTargetLabel(),
+            text: translated,
+          },
+        ]);
       }
     } catch (error) {
       console.warn("Translate warning:", error);
 
       if (!interim) {
         setTranslatedText((prev) => prev + "\n[Dịch lỗi]\n");
+
+        setTranslatedMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + Math.random(),
+            sender: getTargetLabel(),
+            text: "[Dịch lỗi]",
+          },
+        ]);
       }
     } finally {
       if (!interim) setTranslating(false);
@@ -153,6 +182,7 @@ export default function Home() {
     setTargetLang(newLang);
     setTranslatedText("");
     setInterimTranslatedText("");
+    setTranslatedMessages([]);
     setLatestTranslation("Switching language...");
     setStatus(`Switched target language to ${newLang}`);
   };
@@ -201,7 +231,19 @@ export default function Home() {
       }
 
       if (finalText.trim()) {
+        const cleanFinalText = finalText.trim();
+
         setFinalTranscript((prev) => prev + finalText);
+
+        setOriginalMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + Math.random(),
+            sender: "Original",
+            text: cleanFinalText,
+          },
+        ]);
+
         await translateText(finalText, false);
         setInterimTranslatedText("");
       }
@@ -298,6 +340,8 @@ export default function Home() {
     setTranslatedText("");
     setInterimTranslatedText("");
     setLatestTranslation("");
+    setOriginalMessages([]);
+    setTranslatedMessages([]);
   };
 
   const downloadOriginalText = () => {
@@ -400,10 +444,6 @@ export default function Home() {
               </button>
             )}
 
-            <button onClick={clearText} style={buttonStyle("#475569")}>
-              Clear
-            </button>
-
             <button
               onClick={() => setSubtitleMode(true)}
               style={buttonStyle("#7c3aed")}
@@ -451,31 +491,54 @@ export default function Home() {
                   marginBottom: 12,
                 }}
               >
-                <h2>Original</h2>
+                <h2 style={{ margin: 0 }}>Original</h2>
 
-                <button
-                  onClick={downloadOriginalText}
+                <div
                   style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "#2563eb",
-                    color: "white",
-                    cursor: "pointer",
-                    fontWeight: "bold",
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
                   }}
                 >
-                  Download TXT
-                </button>
+                  <button
+                    onClick={clearText}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#475569",
+                      color: "white",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Clear
+                  </button>
+
+                  <button
+                    onClick={downloadOriginalText}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#2563eb",
+                      color: "white",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Download TXT
+                  </button>
+                </div>
               </div>
 
               <div ref={originalBoxRef} style={boxStyle("#000000", "#ffffff")}>
-                <span>{finalTranscript}</span>
-                <span style={{ color: "#999" }}>{interimTranscript}</span>
-
-                {!finalTranscript && !interimTranscript
-                  ? "Original speech will appear here..."
-                  : ""}
+                <ScriptList
+                  messages={originalMessages}
+                  interimText={interimTranscript}
+                  interimSender="Live"
+                  emptyText="Original speech will appear here..."
+                />
               </div>
             </div>
 
@@ -488,14 +551,12 @@ export default function Home() {
                 ref={translationBoxRef}
                 style={boxStyle("#052e16", "#bbf7d0")}
               >
-                <span>{translatedText}</span>
-                <span style={{ color: "#7ddfa8" }}>
-                  {interimTranslatedText}
-                </span>
-
-                {!translatedText && !interimTranslatedText
-                  ? `${getTargetLabel()} translation will appear here...`
-                  : ""}
+                <ScriptList
+                  messages={translatedMessages}
+                  interimText={interimTranslatedText}
+                  interimSender="Live"
+                  emptyText={`${getTargetLabel()} translation will appear here...`}
+                />
               </div>
             </div>
           </div>
@@ -529,6 +590,48 @@ export default function Home() {
         </section>
       )}
     </main>
+  );
+}
+
+function ScriptList({
+  messages,
+  interimText,
+  interimSender,
+  emptyText,
+}: {
+  messages: ScriptMessage[];
+  interimText: string;
+  interimSender: string;
+  emptyText: string;
+}) {
+  if (messages.length === 0 && !interimText) {
+    return <div style={{ color: "#94a3b8" }}>{emptyText}</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {messages.map((msg) => (
+        <div key={msg.id} style={messageRowStyle}>
+          <div style={avatarStyle}>{msg.sender.charAt(0)}</div>
+
+          <div style={{ flex: 1 }}>
+            <div style={senderStyle}>{msg.sender}</div>
+            <div style={messageTextStyle}>{msg.text}</div>
+          </div>
+        </div>
+      ))}
+
+      {interimText && (
+        <div style={{ ...messageRowStyle, opacity: 0.65 }}>
+          <div style={avatarStyle}>{interimSender.charAt(0)}</div>
+
+          <div style={{ flex: 1 }}>
+            <div style={senderStyle}>{interimSender}</div>
+            <div style={messageTextStyle}>{interimText}</div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -622,6 +725,41 @@ const guideBoxStyle: React.CSSProperties = {
   borderRadius: 12,
   marginBottom: 24,
   color: "#cbd5e1",
+};
+
+const messageRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 14,
+  alignItems: "flex-start",
+};
+
+const avatarStyle: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  minWidth: 44,
+  borderRadius: "50%",
+  background: "#334155",
+  color: "white",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: "bold",
+  fontSize: 18,
+};
+
+const senderStyle: React.CSSProperties = {
+  fontWeight: 700,
+  color: "#cbd5e1",
+  marginBottom: 4,
+  fontSize: 16,
+};
+
+const messageTextStyle: React.CSSProperties = {
+  fontSize: 22,
+  lineHeight: 1.5,
+  color: "white",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
 };
 
 function buttonStyle(background: string): React.CSSProperties {
