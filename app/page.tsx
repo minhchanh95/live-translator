@@ -609,7 +609,7 @@ function ScriptList({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {messages.map((msg) => (
         <div key={msg.id} style={messageRowStyle}>
           <div style={avatarStyle}>{msg.sender.charAt(0)}</div>
@@ -729,14 +729,14 @@ const guideBoxStyle: React.CSSProperties = {
 
 const messageRowStyle: React.CSSProperties = {
   display: "flex",
-  gap: 14,
+  gap: 12,
   alignItems: "flex-start",
 };
 
 const avatarStyle: React.CSSProperties = {
-  width: 44,
-  height: 44,
-  minWidth: 44,
+  width: 36,
+  height: 36,
+  minWidth: 36,
   borderRadius: "50%",
   background: "#334155",
   color: "white",
@@ -744,22 +744,23 @@ const avatarStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   fontWeight: "bold",
-  fontSize: 18,
+  fontSize: 16,
 };
 
 const senderStyle: React.CSSProperties = {
   fontWeight: 700,
   color: "#cbd5e1",
-  marginBottom: 4,
-  fontSize: 16,
+  marginBottom: 3,
+  fontSize: 14,
 };
 
 const messageTextStyle: React.CSSProperties = {
-  fontSize: 22,
-  lineHeight: 1.5,
+  fontSize: "clamp(18px, 1.6vw, 28px)",
+  lineHeight: 1.45,
   color: "white",
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",
+  fontWeight: 500,
 };
 
 function buttonStyle(background: string): React.CSSProperties {
