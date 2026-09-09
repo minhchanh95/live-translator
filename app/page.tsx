@@ -31,6 +31,11 @@ export default function Home() {
   const shouldKeepListeningRef = useRef(false);
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Translation guards: prevent duplicate/spam requests and respect rate limits.
+  const lastTranslatedTextRef = useRef("");
+  const translationInFlightRef = useRef(false);
+  const translateCooldownUntilRef = useRef(0);
+
   const originalBoxRef = useRef<HTMLDivElement | null>(null);
   const translationBoxRef = useRef<HTMLDivElement | null>(null);
 
@@ -114,66 +119,97 @@ export default function Home() {
     }, delay);
   };
 
-  const translateText = async (text: string, interim = false) => {
-    if (!text.trim()) return;
+  const translateText = async (text: string) => {
+    const cleanText = text.trim();
+    if (!cleanText) return;
+
+    // Do not translate the same final sentence twice.
+    if (cleanText === lastTranslatedTextRef.current) return;
+
+    // Only one final translation request at a time.
+    if (translationInFlightRef.current) {
+      console.warn(
+        "Translation skipped because another request is still running.",
+      );
+      return;
+    }
+
+    // If the backend/provider recently rate-limited us, wait before trying again.
+    if (Date.now() < translateCooldownUntilRef.current) {
+      const seconds = Math.ceil(
+        (translateCooldownUntilRef.current - Date.now()) / 1000,
+      );
+      setStatus(
+        `Translation temporarily rate-limited. Retry in ${seconds}s...`,
+      );
+      return;
+    }
 
     try {
-      if (!interim) setTranslating(true);
+      translationInFlightRef.current = true;
+      setTranslating(true);
 
-      const sl = getSourceTranslateCode();
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: cleanText,
+          source: getSourceTranslateCode(),
+          target: targetLangRef.current,
+        }),
+      });
 
-      const url =
-        "https://translate.googleapis.com/translate_a/single" +
-        `?client=gtx` +
-        `&sl=${encodeURIComponent(sl)}` +
-        `&tl=${encodeURIComponent(targetLangRef.current)}` +
-        `&dt=t` +
-        `&q=${encodeURIComponent(text)}`;
+      const data = await res.json().catch(() => null);
 
-      const res = await fetch(url);
-      const rawText = await res.text();
+      if (!res.ok || !data?.translatedText) {
+        const message = data?.error || `Translate API failed: ${res.status}`;
 
-      if (rawText.trim().startsWith("<")) {
-        console.warn("Google Translate returned HTML instead of JSON");
-        return;
+        // 429 from the provider is currently surfaced by your API as 502
+        // with an error message containing "429".
+        if (
+          res.status === 429 ||
+          String(message).includes("429") ||
+          String(message).toLowerCase().includes("rate")
+        ) {
+          translateCooldownUntilRef.current = Date.now() + 60_000;
+          setStatus(
+            "Google Translate rate limit (429). Pausing translation for 60s...",
+          );
+          console.warn("Translate rate limited:", message);
+          return;
+        }
+
+        throw new Error(message);
       }
 
-      const data = JSON.parse(rawText);
-      const translated = data[0].map((item: any) => item[0]).join("");
+      const translated = String(data.translatedText).trim();
+      if (!translated) return;
 
-      if (interim) {
-        setInterimTranslatedText(translated);
-        setLatestTranslation(translated);
-      } else {
-        setTranslatedText((prev) => prev + translated + " ");
-        setLatestTranslation(translated);
+      lastTranslatedTextRef.current = cleanText;
 
-        setTranslatedMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now() + Math.random(),
-            sender: getTargetLabel(),
-            text: translated,
-          },
-        ]);
-      }
+      setTranslatedText((prev) => prev + translated + " ");
+      setLatestTranslation(translated);
+
+      setTranslatedMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + Math.random(),
+          sender: getTargetLabel(),
+          text: translated,
+        },
+      ]);
     } catch (error) {
       console.warn("Translate warning:", error);
 
-      if (!interim) {
-        setTranslatedText((prev) => prev + "\n[Dịch lỗi]\n");
-
-        setTranslatedMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now() + Math.random(),
-            sender: getTargetLabel(),
-            text: "[Dịch lỗi]",
-          },
-        ]);
-      }
+      // Keep the original transcript, but don't flood the UI with [Dịch lỗi].
+      setStatus(
+        error instanceof Error
+          ? `Translation error: ${error.message}`
+          : "Translation error",
+      );
     } finally {
-      if (!interim) setTranslating(false);
+      translationInFlightRef.current = false;
+      setTranslating(false);
     }
   };
 
@@ -184,6 +220,8 @@ export default function Home() {
     setInterimTranslatedText("");
     setTranslatedMessages([]);
     setLatestTranslation("Switching language...");
+    lastTranslatedTextRef.current = "";
+    translateCooldownUntilRef.current = 0;
     setStatus(`Switched target language to ${newLang}`);
   };
 
@@ -244,19 +282,26 @@ export default function Home() {
           },
         ]);
 
-        await translateText(finalText, false);
+        await translateText(finalText);
         setInterimTranslatedText("");
       }
 
+      // Keep showing interim speech on the Original side, but DO NOT translate it.
+      // Web Speech fires interim results many times per second and was causing
+      // Google Translate HTTP 429 rate-limit errors.
       setInterimTranscript(interim);
-
-      if (interim.trim()) {
-        translateText(interim, true);
-      }
     };
 
     recognition.onerror = (event: any) => {
       const error = event.error || "unknown";
+
+      // no-speech là bình thường → không cần console.warn
+      if (error === "no-speech") {
+        setStatus("Listening... auto reconnect ON");
+        scheduleRestart(800);
+        return;
+      }
+
       console.warn("Speech recognition warning:", error);
 
       if (!shouldKeepListeningRef.current) return;
@@ -280,12 +325,6 @@ export default function Home() {
       if (error === "network") {
         setStatus("Speech recognition network error. Reconnecting...");
         scheduleRestart(1500);
-        return;
-      }
-
-      if (error === "no-speech") {
-        setStatus("No speech detected. Still listening...");
-        scheduleRestart(800);
         return;
       }
 
@@ -342,6 +381,8 @@ export default function Home() {
     setLatestTranslation("");
     setOriginalMessages([]);
     setTranslatedMessages([]);
+    lastTranslatedTextRef.current = "";
+    translateCooldownUntilRef.current = 0;
   };
 
   const downloadOriginalText = () => {
